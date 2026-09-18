@@ -10,4 +10,5 @@ type State interface {
 	Get(ctx context.Context, key string) (model.Resource, error)
 	List(ctx context.Context) (map[string]model.Resource, error)
 	Delete(ctx context.Context, key string) error
+	Ready(ctx context.Context) (bool, error)
 }

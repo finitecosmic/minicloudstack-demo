@@ -8,16 +8,16 @@ import (
 )
 
 type FakeState struct {
-	resources map[string]model.Resource
-	err       error
-	ctx       context.Context
+	resource map[string]model.Resource
+	err      error
+	ctx      context.Context
 }
 
-func NewFakeState() *FakeState {
+func NewFakeState(ctx context.Context, err error) *FakeState {
 	return &FakeState{
-		resources: make(map[string]model.Resource),
-		err:       nil,
-		ctx:       context.Background(),
+		resource: make(map[string]model.Resource),
+		err:      err,
+		ctx:      context.Background(),
 	}
 }
 
@@ -25,14 +25,14 @@ func (f *FakeState) List(_ context.Context) (map[string]model.Resource, error) {
 	if f.err != nil {
 		return nil, f.err
 	}
-	return f.resources, nil
+	return f.resource, nil
 }
 
 func (f *FakeState) Delete(_ context.Context, key string) error {
 	if f.err != nil {
 		return f.err
 	}
-	delete(f.resources, key)
+	delete(f.resource, key)
 	return nil
 }
 
@@ -40,7 +40,7 @@ func (f *FakeState) Get(_ context.Context, key string) (model.Resource, error) {
 	if f.err != nil {
 		return nil, f.err
 	}
-	resource, exists := f.resources[key]
+	resource, exists := f.resource[key]
 	if !exists {
 		return nil, fmt.Errorf("container %s %s", key, state.ErrResourceNotFound)
 	}
@@ -52,11 +52,18 @@ func (f *FakeState) Save(_ context.Context, key string, resource model.Resource)
 	if f.err != nil {
 		return nil, f.err
 	}
-	resource, exists := f.resources[key]
+	resource, exists := f.resource[key]
 	if !exists {
 		return nil, fmt.Errorf("container %s %s", key, state.ErrResourceAlreadyExists)
 	}
-	f.resources[key] = resource
+	f.resource[key] = resource
 
 	return resource, nil
+}
+
+func (f *FakeState) Ready(_ context.Context) (bool, error) {
+	if f.err != nil {
+		return false, f.err
+	}
+	return true, nil
 }

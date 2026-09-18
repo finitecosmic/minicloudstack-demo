@@ -10,13 +10,13 @@ import (
 func TestService_CreateBucket(t *testing.T) {
 	tests := []struct {
 		name         string
-		bucketConfig BucketConfig
+		bucketConfig model.BucketConfig
 		expectedName string
 		expectedErr  error
 	}{
 		{
 			name: "create bucket",
-			bucketConfig: BucketConfig{
+			bucketConfig: model.BucketConfig{
 				Name:   "test",
 				Region: "us-east-1",
 			},
@@ -36,7 +36,7 @@ func TestService_CreateBucket(t *testing.T) {
 				t.Fatalf("create bucket err: %v", err)
 			}
 			gotName := bucket.Name()
-			if bucket.Key() != gotName {
+			if bucket.Name() != tt.expectedName {
 				t.Fatalf("got: %s expected: %s create bucket key err: %v", gotName, tt.expectedName, err)
 			}
 		})
@@ -53,14 +53,14 @@ func TestService_ListBuckets(t *testing.T) {
 		{
 			name: "list buckets",
 			buckets: map[string]model.Resource{
-				"bucket/test": &Bucket{
-					Config: BucketConfig{
+				"bucket/test": &model.Bucket{
+					Config: model.BucketConfig{
 						Name:   "test",
 						Region: "us-east-1",
 					},
 				},
-				"bucket/backup": &Bucket{
-					Config: BucketConfig{
+				"bucket/backup": &model.Bucket{
+					Config: model.BucketConfig{
 						Name:   "backup",
 						Region: "us-west-2",
 					},
@@ -75,8 +75,6 @@ func TestService_ListBuckets(t *testing.T) {
 			ctx := context.Background()
 			memory := state.NewMemory(tt.buckets)
 
-
-
 			service := New(memory)
 
 			buckets, _ := service.ListBuckets(ctx)
@@ -86,49 +84,3 @@ func TestService_ListBuckets(t *testing.T) {
 		})
 	}
 }
-
-//
-//func TestService_CreateBucketStateError(t *testing.T) {
-//	state := testutil.NewFakeState()
-//	service := New(state)
-//
-//	var tests = []struct {
-//		createBucketInput CreateBucketInput
-//		region            string
-//		currentBuckets    []model.Bucket
-//		expectedError     error
-//	}{
-//		{
-//			createBucketInput: CreateBucketInput{
-//				Name:   "test-bucket",
-//				Region: "us-east-1",
-//			},
-//			currentBuckets: []model.Bucket{
-//				{
-//					Name:      "test-bucket",
-//					Region:    "us-west-2",
-//					CreatedAt: time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC),
-//				},
-//				{
-//					Name:      "logs",
-//					Region:    "us-east-1",
-//					CreatedAt: time.Date(2026, 1, 2, 12, 0, 0, 0, time.UTC),
-//				},
-//				{
-//					Name:      "backups",
-//					Region:    "us-east-1",
-//					CreatedAt: time.Date(2026, 1, 3, 12, 0, 0, 0, time.UTC),
-//				},
-//			},
-//			expectedError: errors.New("error creating bucket: test-bucket already exists"),
-//		},
-//	}
-//	for _, tt := range tests {
-//		_, err := service.CreateBucket(context.Background(), tt.createBucketInput)
-//
-//		if !errors.Is(err, tt.expectedError) {
-//			t.Fatal("expected", tt.expectedError, "got", err)
-//		}
-//
-//	}
-//}

@@ -6,58 +6,17 @@ import (
 	"minicloudstack/internal/model"
 )
 
-type Bucket struct {
-	Config     BucketConfig
-	Versioning bool
-}
-
-func NewBucket(config BucketConfig) Bucket {
-	return Bucket{
-		Config:     BucketConfig{},
-		Versioning: false,
-	}
-}
-
-type BucketConfig struct {
-	Name       string
-	Region     string
-	Versioning bool
-	Encryption string
-	Tags       map[string]string
-}
-
-func NewBucketConfig() BucketConfig {
-	return BucketConfig{
-		Name:       "",
-		Region:     "",
-		Versioning: false,
-		Encryption: "",
-		Tags:       nil,
-	}
-
-}
-
-func (b *BucketConfig) Error() string {
-	//TODO implement me
-	panic("implement me")
-}
-
-type BucketOutput struct {
-	Bucket *Bucket
-	Error  error
-}
-
-func (s *Service) CreateBucket(ctx context.Context, bucketConfig BucketConfig) (model.Resource, error) {
-	bucket := NewBucket(bucketConfig)
+func (s *Service) CreateBucket(ctx context.Context, bucketConfig model.BucketConfig) (model.Resource, error) {
+	bucket := model.NewBucket(bucketConfig)
 
 	name := bucketConfig.Name
 	savedBucket, err := s.state.Save(ctx, name, bucket)
 	if err != nil {
 		if errors.Is(err, ErrBucketAlreadyExists) {
-			return nil, ErrBucketAlreadyExists
+			return savedBucket, ErrBucketAlreadyExists
 		}
 
-		return nil, err
+		return savedBucket, err
 	}
 
 	return savedBucket, nil
@@ -82,12 +41,4 @@ func (s *Service) DeleteBucket(ctx context.Context, bucketName string) error {
 		return err
 	}
 	return nil
-}
-
-func (b Bucket) Key() string {
-	return b.Config.Name
-}
-
-func (b Bucket) Name() string {
-	return b.Config.Name
 }

@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"minicloudstack/internal/service/objectstore"
 	"minicloudstack/internal/state"
 	"net/http"
@@ -57,16 +58,17 @@ func TestBucketHandler_CreateBucketXMLHTTPResponse(t *testing.T) {
 	handler := NewBucketHandler(objectstoreService)
 
 	var tests = []struct {
-		httpMethod   string
-		body         string
-		headers      map[string]string
-		path         string
-		wantStatus   int
-		wantLocation string
+		httpMethod string
+		body       string
+		headers    map[string]string
+		uri        string
+		wantStatus int
+		wantName   string
+		wantKey    string
 	}{
 		{
 			httpMethod: http.MethodPost,
-			path:       "/buckets/test-bucket",
+			uri:        "/buckets/test-bucket",
 			body: `
 				<CreateBucketConfiguration>
 					<LocationConstraint>us-west-2</LocationConstraint>
@@ -75,32 +77,37 @@ func TestBucketHandler_CreateBucketXMLHTTPResponse(t *testing.T) {
 			headers: map[string]string{
 				"Content-Type": "application/xml",
 			},
-			wantStatus:   http.StatusCreated,
-			wantLocation: "/buckets/test-bucket",
+			wantStatus: http.StatusCreated,
+			wantName:   "test-bucket",
+			wantKey:    "/buckets/test-bucket",
 		},
 	}
 
 	for _, tt := range tests {
+		ctx := context.Background()
 		req := httptest.NewRequest(
 			tt.httpMethod,
-			tt.path,
+			tt.uri,
 			strings.NewReader(string(tt.body)),
 		)
 
 		for key, value := range tt.headers {
 			req.Header.Set(key, value)
 		}
-		req.SetPathValue("name", tt.path)
+		req.SetPathValue("name", tt.uri)
 
 		rec := httptest.NewRecorder()
+
 		handler.CreateBucket(rec, req)
 
-		if rec.Code != tt.wantStatus {
-			t.Errorf("want %d, got %d", tt.wantStatus, rec.Code)
+		gotBucket, err := handler.objectStore.GetBucket(ctx, "test-bucket")
+		if err != nil {
+			t.Errorf("want no errors, got %v", err)
 		}
-		if got := rec.Header().Get("Location"); got != tt.wantLocation {
-			t.Errorf("want %s, got %s", tt.wantLocation, got)
+		if gotBucket.Name() != tt.wantName {
+			t.Errorf("want %s, got %s", tt.wantName, gotBucket.Name())
 		}
+
 	}
 }
 

@@ -3,8 +3,10 @@ package handlers
 import (
 	"encoding/json"
 	"encoding/xml"
+	"minicloudstack/internal/model"
 	"minicloudstack/internal/service/objectstore"
 	"net/http"
+	"path"
 	"strings"
 )
 
@@ -57,12 +59,12 @@ type ListBucketsResponse interface {
 	isListBucketsResponse()
 }
 type ListBucketsJSONResponse struct {
-	Buckets []objectstore.Bucket `json:"buckets"`
+	Buckets []model.Bucket `json:"buckets"`
 }
 
 type ListBucketsXMLResponse struct {
-	XMLName xml.Name             `xml:"ListAllMyBucketsResult"`
-	Buckets []objectstore.Bucket `xml:"Buckets>Bucket"`
+	XMLName xml.Name       `xml:"ListAllMyBucketsResult"`
+	Buckets []model.Bucket `xml:"Buckets>Bucket"`
 }
 
 func (ListBucketsJSONResponse) isListBucketsResponse() {}
@@ -121,7 +123,7 @@ func (h *BucketHandler) CreateBucket(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		name = r.PathValue("name")
+		name = path.Base(r.URL.Path)
 		region = req.LocationConstraint
 	}
 
@@ -134,7 +136,11 @@ func (h *BucketHandler) CreateBucket(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	bucket, err := h.objectStore.CreateBucket(ctx, objectstore.BucketConfig{})
+	bucket, err := h.objectStore.CreateBucket(ctx, model.BucketConfig{
+		Key:    "bucket/" + name,
+		Name:   name,
+		Region: region,
+	})
 
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -147,7 +153,7 @@ func (h *BucketHandler) CreateBucket(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *BucketHandler) ListBuckets(w http.ResponseWriter, r *http.Request) {
-	var buckets []objectstore.Bucket
+	var buckets []model.Bucket
 	var response ListBucketsResponse
 
 	accept := r.Header.Get("Accept")
@@ -201,3 +207,37 @@ func (h *BucketHandler) DeleteBucket(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusAccepted)
 }
+
+//func createJsonBucket(ctx context.Context, h BucketHandler, w http.ResponseWriter, r *http.Request) {
+//	var bucket model.Bucket
+//	var name string
+//	var region string
+//
+//	ctx := r.Context()
+//
+//	var req CreateBucketJSONRequest
+//
+//	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+//		http.Error(w, "invalid json", http.StatusBadRequest)
+//		return
+//	}
+//	if req.Name != "" {
+//		name = req.Name
+//	}
+//	if req.Region != "" {
+//		region = req.Region
+//	}
+//
+//	bucket, err := h.objectStore.CreateBucket(ctx, model.BucketConfig{
+//		Name:   name,
+//		Region: region,
+//	})
+//
+//	if err != nil {
+//		http.Error(w, err.Error(), http.StatusInternalServerError)
+//		return
+//	}
+//
+//}
+
+func (h *BucketHandler) ListBucketsJSON(w http.ResponseWriter, r *http.Request) {}

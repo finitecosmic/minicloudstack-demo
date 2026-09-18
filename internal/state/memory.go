@@ -2,6 +2,7 @@ package state
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"maps"
 	"minicloudstack/internal/model"
@@ -80,4 +81,16 @@ func (m *Memory) Get(_ context.Context, key string) (model.Resource, error) {
 	}
 
 	return resource, nil
+}
+
+func (m *Memory) Ready(_ context.Context) (bool, error) {
+	if m == nil {
+		return false, errors.New("memory state is nil")
+	}
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	if m.data == nil {
+		return false, errors.New("memory store data is not initialized")
+	}
+	return true, nil
 }

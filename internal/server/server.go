@@ -5,18 +5,21 @@ import (
 	"minicloudstack/internal/service/objectstore"
 	"minicloudstack/internal/state"
 	"net/http"
+	"sync/atomic"
 )
 
 type Server struct {
 	router        http.Handler
 	bucketHandler *handlers.BucketHandler
+	state         state.State
+	ready         atomic.Bool
 }
 
 func New() *Server {
 	// Create the state implementation.
 	memory := state.NewMemory()
 
-	//Inject state in service
+	//state injection
 	objectstoreService := objectstore.New(memory)
 
 	bucketHandler := handlers.NewBucketHandler(objectstoreService)
