@@ -10,49 +10,89 @@ import (
 	"testing"
 )
 
-func TestBucketHandler_CreateBucketJSONHTTPResponse(t *testing.T) {
-	memory := state.NewMemory()
-	objectstoreService := objectstore.New(memory)
-	handler := NewBucketHandler(objectstoreService)
-
+func TestBucketHandler_CreateBucket(t *testing.T) {
 	var tests = []struct {
-		httpMethod string
-		body       string
-		headers    map[string]string
-		path       string
-		want       int
+		name             string
+		httpMethod       string
+		body             string
+		headers          map[string]string
+		uri              string
+		wantName         string
+		wantCode         int
+		wantErrorMessage error
 	}{
 		{
+			name:       "json correct bucket name",
 			httpMethod: http.MethodPost,
-			path:       "/buckets",
+			uri:        "/buckets",
 			body:       `{"name": "test", "region": "us-east-1"}`,
 			headers: map[string]string{
 				"Content-Type": "application/json",
 			},
-			want: http.StatusCreated,
+			wantName:         "test",
+			wantCode:         http.StatusCreated,
+			wantErrorMessage: nil,
+		},
+		{
+			name:       "xml correct bucket name",
+			httpMethod: http.MethodPost,
+			uri:        "/buckets/test-bucket",
+			body: `
+				<CreateBucketConfiguration>
+					<LocationConstraint>us-west-2</LocationConstraint>
+				</CreateBucketConfiguration>
+			`,
+			headers: map[string]string{
+				"Content-Type": "application/xml",
+			},
+			wantCode:         http.StatusCreated,
+			wantName:         "test-bucket",
+			wantErrorMessage: nil,
+		},
+		{
+			name:       "xml incorrect correct bucket name",
+			httpMethod: http.MethodPost,
+			uri:        "/buckets/",
+			body: `
+				<CreateBucketConfiguration>
+					<LocationConstraint>us-west-2</LocationConstraint>
+				</CreateBucketConfiguration>
+			`,
+			headers: map[string]string{
+				"Content-Type": "application/xml",
+			},
+			wantCode:         http.StatusBadRequest,
+			wantName:         "",
+			wantErrorMessage: ErrBucketNameRequired,
 		},
 	}
 
 	for _, tt := range tests {
-		req := httptest.NewRequest(
-			tt.httpMethod,
-			tt.path,
-			strings.NewReader(string(tt.body)),
-		)
+		t.Run(tt.httpMethod, func(t *testing.T) {
+			memory := state.NewMemory()
+			objectstoreService := objectstore.New(memory)
+			handler := NewBucketHandler(objectstoreService)
 
-		for key, value := range tt.headers {
-			req.Header.Set(key, value)
-		}
-		rec := httptest.NewRecorder()
-		handler.CreateBucket(rec, req)
+			req := httptest.NewRequest(
+				tt.httpMethod,
+				tt.uri,
+				strings.NewReader(tt.body),
+			)
 
-		if rec.Code != tt.want {
-			t.Errorf("want %d, got %d", tt.want, rec.Code)
-		}
+			for key, value := range tt.headers {
+				req.Header.Set(key, value)
+			}
+			rec := httptest.NewRecorder()
+			handler.Create(rec, req)
+
+			if rec.Code != tt.wantCode {
+				t.Errorf("want %d, got %d", tt.wantCode, rec.Code)
+			}
+		})
 	}
 }
 
-func TestBucketHandler_CreateBucketXMLHTTPResponse(t *testing.T) {
+func TestBucketHandler_DeleteBucket(t *testing.T) {
 	memory := state.NewMemory()
 	objectstoreService := objectstore.New(memory)
 	handler := NewBucketHandler(objectstoreService)
@@ -88,7 +128,7 @@ func TestBucketHandler_CreateBucketXMLHTTPResponse(t *testing.T) {
 		req := httptest.NewRequest(
 			tt.httpMethod,
 			tt.uri,
-			strings.NewReader(string(tt.body)),
+			strings.NewReader(tt.body),
 		)
 
 		for key, value := range tt.headers {
@@ -98,9 +138,9 @@ func TestBucketHandler_CreateBucketXMLHTTPResponse(t *testing.T) {
 
 		rec := httptest.NewRecorder()
 
-		handler.CreateBucket(rec, req)
+		handler.Create(rec, req)
 
-		gotBucket, err := handler.objectStore.GetBucket(ctx, "test-bucket")
+		gotBucket, err := handler.service.GetBucket(ctx, "test-bucket")
 		if err != nil {
 			t.Errorf("want no errors, got %v", err)
 		}
@@ -109,10 +149,6 @@ func TestBucketHandler_CreateBucketXMLHTTPResponse(t *testing.T) {
 		}
 
 	}
-}
-
-func TestBucketHandler_DeleteBucket(t *testing.T) {
-
 }
 
 func TestBucketHandler_GetBucket(t *testing.T) {

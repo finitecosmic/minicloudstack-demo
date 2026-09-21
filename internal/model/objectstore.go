@@ -1,5 +1,14 @@
 package model
 
+import "net/http"
+
+type ObjectHandler interface {
+	Put(http.ResponseWriter, *http.Request)
+	Get(http.ResponseWriter, *http.Request)
+	List(http.ResponseWriter, *http.Request)
+	Delete(http.ResponseWriter, *http.Request)
+}
+
 type ObjectStoreConfig struct {
 	Name       string
 	Region     string

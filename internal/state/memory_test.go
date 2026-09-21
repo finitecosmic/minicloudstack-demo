@@ -1,26 +1,140 @@
 // internal/state/memory_test.go
-package state_test
+package state
 
 import (
-	"fmt"
-	"minicloudstack/internal/state"
-	"minicloudstack/internal/testutil"
+	"context"
+	"errors"
+	"minicloudstack/internal/model"
 	"testing"
 )
 
-func TestMemory_List_Bucket(t *testing.T) {
-	memory := state.NewMemory()
-
-	_ = testutil.NewFakeBucket(
-		testutil.FakeBucketConfig{
-			Name:       "",
-			Region:     "",
-			Versioning: false,
-			Encryption: "",
-			Tags:       nil,
+func TestMemory_Save(t *testing.T) {
+	tests := []struct {
+		name           string
+		newBucketKey   string
+		newBucketName  string
+		memoryData     []model.Resource
+		wantName       string
+		wantKey        string
+		wantNumBuckets int
+		wantErr        error
+	}{
+		{
+			name:          "valid save bucket",
+			newBucketKey:  "bucket/new-bucket",
+			newBucketName: "new-bucket",
+			memoryData: []model.Resource{
+				model.Bucket{
+					SpecData: model.BucketSpec{
+						Key:  "bucket/existing-bucket",
+						Name: "existing-bucket",
+					},
+				},
+			},
+			wantName:       "new-bucket",
+			wantKey:        "bucket/new-bucket",
+			wantNumBuckets: 2,
+			wantErr:        nil,
 		},
-	)
-	fmt.Print(memory)
+		{
+			name:           "valid save bucket",
+			newBucketKey:   "bucket/new-bucket",
+			newBucketName:  "new-bucket",
+			memoryData:     nil,
+			wantName:       "new-bucket",
+			wantKey:        "bucket/new-bucket",
+			wantNumBuckets: 1,
+			wantErr:        nil,
+		},
+		{
+			name:          "save already existing bucket",
+			newBucketKey:  "bucket/existing-bucket",
+			newBucketName: "existing-bucket",
+			memoryData: []model.Resource{
+				model.Bucket{
+					SpecData: model.BucketSpec{
+						Key:  "bucket/existing-bucket",
+						Name: "existing-bucket",
+					},
+				},
+			},
+			wantName:       "",
+			wantKey:        "",
+			wantErr:        ErrResourceAlreadyExists,
+			wantNumBuckets: 1,
+		},
+		{
+			name:          "invalid bucket with empty key",
+			newBucketKey:  "",
+			newBucketName: "existing-bucket",
+			memoryData: []model.Resource{
+				model.Bucket{
+					SpecData: model.BucketSpec{
+						Key:  "bucket/existing-bucket",
+						Name: "existing-bucket",
+					},
+				},
+			},
+			wantName:       "existing-bucket",
+			wantKey:        "bucket/existing-bucket",
+			wantNumBuckets: 1,
+			wantErr:        nil,
+		},
+		{
+			name:          "new bucket with nil memory data",
+			newBucketKey:  "buckey/new-bucket",
+			newBucketName: "new-bucket",
+			memoryData: []model.Resource{
+				model.Bucket{
+					SpecData: model.BucketSpec{
+						Key:  "bucket/existing-bucket",
+						Name: "existing-bucket",
+					},
+				},
+			},
+			wantName:       "new-bucket",
+			wantKey:        "bucket/new-bucket",
+			wantNumBuckets: 2,
+			wantErr:        nil,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			memory := NewMemory()
+
+			for _, v := range tt.memoryData {
+				memory.data[v.Key()] = v
+			}
+
+			newBucket := model.Bucket{
+				SpecData: model.BucketSpec{
+					Key:  tt.newBucketKey,
+					Name: tt.newBucketName,
+				},
+			}
+			gotBucket, err := memory.Save(context.Background(), tt.newBucketKey, newBucket)
+			correctErr := errors.Is(err, tt.wantErr)
+
+			if tt.wantErr != nil && !correctErr {
+				t.Fatalf(
+					"got error: %v, expected: %v",
+					err,
+					tt.wantErr,
+				)
+			} else if gotBucket != nil {
+				if gotBucket.Key() != tt.wantKey {
+					t.Fatalf("got bucket key %q, expected %q", gotBucket.Key(), tt.wantKey)
+				}
+				if gotBucket.Name() != tt.wantName {
+					t.Fatalf("got bucket name %q, expected: %q", gotBucket.Name(), tt.wantName)
+				}
+				if len(memory.data) != tt.wantNumBuckets {
+					t.Fatalf("got %d buckets, expected %d", len(memory.data), tt.wantNumBuckets)
+				}
+			}
+		})
+	}
 }
 
 //type testResource struct {

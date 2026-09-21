@@ -11,12 +11,12 @@ import (
 )
 
 type BucketHandler struct {
-	objectStore *objectstore.Service
+	service *objectstore.Service
 }
 
 func NewBucketHandler(objectStore *objectstore.Service) *BucketHandler {
 	return &BucketHandler{
-		objectStore: objectStore,
+		service: objectStore,
 	}
 }
 
@@ -71,9 +71,9 @@ func (ListBucketsJSONResponse) isListBucketsResponse() {}
 func (ListBucketsXMLResponse) isListBucketsResponse()  {}
 
 type BucketResponse struct {
-	Name     string `"json":"name" "xml":"name"`
-	Region   string `"json":"region" "xml":"region"`
-	CreateAt string `"json":"createAt" "xml":"createAt"`
+	Name     string `json:"name" xml:"Name"`
+	Region   string `json:"region" xml:"Region"`
+	CreateAt string `json:"create_at" xml:"CreateAt"`
 }
 
 type ListBucketRequest struct {
@@ -90,23 +90,24 @@ type DeleteBucketRequest struct {
 	Region string `json:"region"`
 }
 
-func (h *BucketHandler) CreateBucket(w http.ResponseWriter, r *http.Request) {
+func (h *BucketHandler) Create(w http.ResponseWriter, r *http.Request) {
 	var contentType string
-	var err error
 	var name string
 	var region string
+	var err error
 
 	ctx := r.Context()
 
 	if contentType, err = parseContentType(r); err != nil {
-		w.WriteHeader(http.StatusBadRequest)
+		w.WriteHeader(http.StatusUnsupportedMediaType)
+		w.Write([]byte(err.Error()))
 		return
 	}
 	switch contentType {
 	case "application/json":
 		var req CreateBucketJSONRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			http.Error(w, "invalid json", http.StatusBadRequest)
+			http.Error(w, ErrInvalidJSON.Error(), http.StatusBadRequest)
 			return
 		}
 		if req.Name != "" {
@@ -136,7 +137,7 @@ func (h *BucketHandler) CreateBucket(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	bucket, err := h.objectStore.CreateBucket(ctx, model.BucketConfig{
+	bucket, err := h.service.CreateBucket(ctx, model.BucketConfig{
 		Key:    "bucket/" + name,
 		Name:   name,
 		Region: region,
@@ -152,7 +153,7 @@ func (h *BucketHandler) CreateBucket(w http.ResponseWriter, r *http.Request) {
 
 }
 
-func (h *BucketHandler) ListBuckets(w http.ResponseWriter, r *http.Request) {
+func (h *BucketHandler) List(w http.ResponseWriter, r *http.Request) {
 	var buckets []model.Bucket
 	var response ListBucketsResponse
 
@@ -172,7 +173,7 @@ func (h *BucketHandler) ListBuckets(w http.ResponseWriter, r *http.Request) {
 	writeResponse(w, r, response)
 }
 
-func (h *BucketHandler) GetBucket(w http.ResponseWriter, r *http.Request) {
+func (h *BucketHandler) Get(w http.ResponseWriter, r *http.Request) {
 	var req GetBucketRequest
 	ctx := r.Context()
 
@@ -180,7 +181,7 @@ func (h *BucketHandler) GetBucket(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "invalid json", http.StatusBadRequest)
 	}
 
-	bucket, err := h.objectStore.GetBucket(ctx, req.Name)
+	bucket, err := h.service.GetBucket(ctx, req.Name)
 
 	if bucket == nil {
 		http.Error(w, err.Error(), http.StatusNotFound)
@@ -194,12 +195,11 @@ func (h *BucketHandler) GetBucket(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(bucket)
 }
 
-func (h *BucketHandler) DeleteBucket(w http.ResponseWriter, r *http.Request) {
-
+func (h *BucketHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	name := r.PathValue("name")
 
-	err := h.objectStore.DeleteBucket(ctx, name)
+	err := h.service.DeleteBucket(ctx, name)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
@@ -207,37 +207,3 @@ func (h *BucketHandler) DeleteBucket(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusAccepted)
 }
-
-//func createJsonBucket(ctx context.Context, h BucketHandler, w http.ResponseWriter, r *http.Request) {
-//	var bucket model.Bucket
-//	var name string
-//	var region string
-//
-//	ctx := r.Context()
-//
-//	var req CreateBucketJSONRequest
-//
-//	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-//		http.Error(w, "invalid json", http.StatusBadRequest)
-//		return
-//	}
-//	if req.Name != "" {
-//		name = req.Name
-//	}
-//	if req.Region != "" {
-//		region = req.Region
-//	}
-//
-//	bucket, err := h.objectStore.CreateBucket(ctx, model.BucketConfig{
-//		Name:   name,
-//		Region: region,
-//	})
-//
-//	if err != nil {
-//		http.Error(w, err.Error(), http.StatusInternalServerError)
-//		return
-//	}
-//
-//}
-
-func (h *BucketHandler) ListBucketsJSON(w http.ResponseWriter, r *http.Request) {}

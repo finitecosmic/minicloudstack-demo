@@ -15,18 +15,11 @@ type Memory struct {
 	ctx  context.Context
 }
 
-func NewMemory(data ...map[string]model.Resource) *Memory {
-	var resources map[string]model.Resource
-	if len(data) > 0 {
-		resources = data[0]
-	}
-	if resources == nil {
-		resources = make(map[string]model.Resource)
-	}
+func NewMemory(resources ...map[string]model.Resource) *Memory {
+	data := make(map[string]model.Resource, len(resources))
 
 	return &Memory{
-		mu:   sync.RWMutex{},
-		data: resources,
+		data: data,
 	}
 }
 
@@ -35,18 +28,14 @@ func (m *Memory) Save(_ context.Context, key string, resource model.Resource) (m
 	defer m.mu.Unlock()
 
 	if key == "" {
-		key = resource.Key()
+		key = fmt.Sprintf("%s/%s", resource.ResourceType(), resource.Name())
 	}
 	if _, exists := m.data[key]; exists {
-		return nil, fmt.Errorf(
-			"resource %q: %w",
-			key,
-			ErrResourceAlreadyExists,
-		)
+		return nil, ErrResourceAlreadyExists
 	}
-
 	m.data[key] = resource
-	return m.data[key], nil
+
+	return resource, nil
 }
 
 func (m *Memory) List(_ context.Context) (map[string]model.Resource, error) {

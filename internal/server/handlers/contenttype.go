@@ -9,14 +9,38 @@ import (
 	"strings"
 )
 
+var supportedMediaTypes = map[string]struct{}{
+	"application/json": {},
+	"application/xml":  {},
+}
+
+func isSupportedMediaType(contentType string) error {
+	if contentType == "" {
+		return ErrContentTypeEmpty
+	}
+
+	_, ok := supportedMediaTypes[contentType]
+	if !ok {
+		return ErrUnsupportedMedia
+	}
+
+	return nil
+}
+
 func parseContentType(r *http.Request) (string, error) {
+
+	if err := isSupportedMediaType(r.Header.Get("Content-Type")); err != nil {
+		return "", err
+	}
+
 	contentType := r.Header.Get("Content-Type")
 	if contentType == "" {
 		return "", fmt.Errorf("content type is empty")
 	}
-	mediaType, _, err := mime.ParseMediaType(contentType)
+
+	mediaType, _, err := mime.ParseMediaType(r.Header.Get("Content-Type"))
 	if err != nil {
-		return "", fmt.Errorf("invalid content type: %w", err)
+		return "", ErrParseMediaType
 	}
 	return mediaType, nil
 }

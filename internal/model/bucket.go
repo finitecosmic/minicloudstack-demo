@@ -1,30 +1,43 @@
 package model
 
 type Bucket struct {
-	Config     BucketConfig
-	Versioning bool
+	SpecData  BucketSpec
+	DependsOn []string
 }
 
-func NewBucket(config BucketConfig) Bucket {
+func NewBucket(config BucketSpec) Bucket {
 	return Bucket{
-		Config: BucketConfig{
+		SpecData: BucketSpec{
 			Key:    "bucket/" + config.Name,
 			Name:   config.Name,
 			Region: config.Region,
 		},
-		Versioning: false,
+		DependsOn: []string{},
 	}
 }
 
 func (b Bucket) Key() string {
-	return b.Config.Key
+
+	return "bucket/" + b.SpecData.Name
 }
 
 func (b Bucket) Name() string {
-	return b.Config.Name
+	return b.SpecData.Name
 }
 
-type BucketConfig struct {
+func (b Bucket) GetSpec() Spec {
+	return b.SpecData
+}
+
+func (b Bucket) GetDependencies() []string {
+	return b.DependsOn
+}
+
+func (b Bucket) ResourceType() string {
+	return "bucket"
+}
+
+type BucketSpec struct {
 	Key        string
 	Name       string
 	Region     string
@@ -33,8 +46,8 @@ type BucketConfig struct {
 	Tags       map[string]string
 }
 
-func NewBucketConfig() BucketConfig {
-	return BucketConfig{
+func NewBucketSpec() BucketSpec {
+	return BucketSpec{
 		Name:       "",
 		Region:     "",
 		Versioning: false,
@@ -44,7 +57,7 @@ func NewBucketConfig() BucketConfig {
 
 }
 
-func (b *BucketConfig) Error() string {
+func (b *BucketSpec) Error() string {
 	//TODO implement me
 	panic("implement me")
 }

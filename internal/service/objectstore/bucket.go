@@ -6,19 +6,17 @@ import (
 	"minicloudstack/internal/model"
 )
 
-func (s *Service) CreateBucket(ctx context.Context, bucketConfig model.BucketConfig) (model.Resource, error) {
-	bucket := model.NewBucket(bucketConfig)
+func (s *Service) CreateBucket(ctx context.Context, bucketSpec model.BucketSpec) (model.Resource, error) {
+	newBucket := model.NewBucket(bucketSpec)
 
-	name := bucketConfig.Name
-	savedBucket, err := s.state.Save(ctx, name, bucket)
+	name := bucketSpec.Name
+	savedBucket, err := s.state.Save(ctx, name, newBucket)
 	if err != nil {
 		if errors.Is(err, ErrBucketAlreadyExists) {
-			return savedBucket, ErrBucketAlreadyExists
+			return savedBucket, err
 		}
 
-		return savedBucket, err
 	}
-
 	return savedBucket, nil
 }
 
