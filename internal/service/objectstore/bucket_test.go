@@ -5,47 +5,52 @@ import (
 	"errors"
 	"minicloudstack/internal/model"
 	"minicloudstack/internal/state"
+	"minicloudstack/internal/testutil/mock"
 	"testing"
 )
 
 func TestService_CreateBucketName(t *testing.T) {
 	tests := []struct {
-		name          string
-		newBucketSpec model.BucketSpec
-		specData      map[string]model.Resource
-		wantName      string
-		wantErr       error
+		name         string
+		bucketSpec   model.BucketSpec
+		bucketName   string
+		bucketKey    string
+		resourceType string
+		existingData map[string]model.Resource
+		wantName     string
+		wantErr      error
 	}{
 		{
-			name: "create bucket",
-			newBucketSpec: model.BucketSpec{
-				Name: "new-bucket",
+			name:       "create bucket",
+			bucketName: "new-bucket",
+			bucketKey:  "bucket/new-bucket",
+			bucketSpec: model.BucketSpec{
+				SpecName: "new_bucket_spec",
 			},
-			specData: nil,
-			wantName: "new-bucket",
-			wantErr:  nil,
+			existingData: nil,
+			wantName:     "new-bucket",
+			wantErr:      nil,
 		},
 		{
 			name: "create bucket empty name",
-			newBucketSpec: model.BucketSpec{
-				Name: "new-bucket",
+			bucketSpec: model.BucketSpec{
+				SpecName: "new_bucket_spec",
 			},
-			specData: map[string]model.Resource{},
-			wantName: "new-bucket",
-			wantErr:  nil,
+			bucketName:   "",
+			resourceType: model.BucketResourceType,
+			existingData: map[string]model.Resource{},
+			wantName:     "new-bucket",
+			wantErr:      nil,
 		},
 		{
 			name: "create bucket already exists",
-			newBucketSpec: model.BucketSpec{
-				Key:  "existing/test-bucket",
-				Name: "test-bucket",
+			bucketSpec: model.BucketSpec{
+				SpecName: "existing_test-bucket_spec",
 			},
-
-			specData: map[string]model.Resource{
+			bucketName: "existing_bucket",
+			existingData: map[string]model.Resource{
 				"existing-bucket": model.Bucket{
-					SpecData: model.BucketSpec{
-						Name: "existing-bucket",
-					},
+					BucketName: "existing_bucket",
 				},
 			},
 			wantName: "",
@@ -56,20 +61,16 @@ func TestService_CreateBucketName(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			ctx := context.Background()
-			memory := state.NewMemory(tt.specData)
-			state.NewMemory()
-			service := New(memory)
 
-			newBucket := model.NewBucket(tt.newBucketSpec)
-
-			gotBucket, err := service.CreateBucket(ctx, newBucket.SpecData)
+			fakeMemory := mock.NewFakeMemory(tt.existingData)
+			svc := New(fakeMemory)
+			gotBucket, err := svc.CreateBucket(ctx, tt.bucketKey, tt.bucketSpec)
 			if !errors.Is(err, tt.wantErr) {
 				t.Errorf("CreateBucket() error = %v, wantErr %v", err, tt.wantErr)
 			}
 
-			gotName := gotBucket.Name()
 			if gotBucket != nil && gotBucket.Name() != tt.wantName {
-				t.Fatalf("got: %s expected: %s create bucket key err: %v", gotName, tt.wantName, err)
+				t.Fatalf("got: %s expected: %s", gotBucket.Name(), tt.wantName)
 			}
 
 		})
@@ -81,6 +82,7 @@ func TestService_ListBuckets(t *testing.T) {
 	var tests = []struct {
 		name            string
 		buckets         map[string]model.Resource
+		resourceType    string
 		expectedBuckets int
 	}{
 		{
@@ -88,14 +90,14 @@ func TestService_ListBuckets(t *testing.T) {
 			buckets: map[string]model.Resource{
 				"bucket/test": &model.Bucket{
 					SpecData: model.BucketSpec{
-						Name:   "test",
-						Region: "us-east-1",
+						SpecName: "spec_test",
+						Region:   "us-east-1",
 					},
 				},
 				"bucket/backup": &model.Bucket{
 					SpecData: model.BucketSpec{
-						Name:   "backup",
-						Region: "us-west-2",
+						SpecName: "spec_backup",
+						Region:   "us-west-2",
 					},
 				},
 			},
@@ -106,7 +108,7 @@ func TestService_ListBuckets(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			ctx := context.Background()
-			memory := state.NewMemory(tt.buckets)
+			memory := state.NewMemory(model.BucketResourceType, tt.buckets)
 
 			service := New(memory)
 

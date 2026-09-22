@@ -2,20 +2,24 @@ package objectstore
 
 import (
 	"context"
-	"errors"
 	"minicloudstack/internal/model"
 )
 
-func (s *Service) CreateBucket(ctx context.Context, bucketSpec model.BucketSpec) (model.Resource, error) {
-	newBucket := model.NewBucket(bucketSpec)
+func (s *Service) CreateBucket(ctx context.Context, key string, spec model.BucketSpec) (model.Resource, error) {
 
-	name := bucketSpec.Name
-	savedBucket, err := s.state.Save(ctx, name, newBucket)
+	// validate
+	if key == "" {
+		return nil, ErrBucketNameRequired
+	}
+	exists, err := s.bucketExists(ctx, key)
+	if exists {
+		return nil, ErrBucketAlreadyExists
+	}
+	newBucket := model.NewBucket(key, spec)
+
+	savedBucket, err := s.state.Save(ctx, key, newBucket)
 	if err != nil {
-		if errors.Is(err, ErrBucketAlreadyExists) {
-			return savedBucket, err
-		}
-
+		return nil, err
 	}
 	return savedBucket, nil
 }
@@ -24,8 +28,8 @@ func (s *Service) ListBuckets(ctx context.Context) (map[string]model.Resource, e
 	return s.state.List(ctx)
 }
 
-func (s *Service) GetBucket(ctx context.Context, bucketName string) (model.Resource, error) {
-	bucket, err := s.state.Get(ctx, bucketName)
+func (s *Service) GetBucket(ctx context.Context, bucketKey string) (model.Resource, error) {
+	bucket, err := s.state.Get(ctx, bucketKey)
 
 	if err != nil {
 		return nil, err
@@ -39,4 +43,12 @@ func (s *Service) DeleteBucket(ctx context.Context, bucketName string) error {
 		return err
 	}
 	return nil
+}
+
+func (s *Service) bucketExists(ctx context.Context, bucketName string) (bool, error) {
+	_, err := s.GetBucket(ctx, bucketName)
+	if err != nil {
+		return false, err
+	}
+	return true, nil
 }

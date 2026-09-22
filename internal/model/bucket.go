@@ -1,68 +1,44 @@
 package model
 
+import "time"
+
 type Bucket struct {
-	SpecData  BucketSpec
-	DependsOn []string
+	BucketName   string
+	BucketKey    string
+	SpecData     BucketSpec
+	DependsOn    []string
+	CreatedAt    time.Time
+	UpdatedAt    time.Time
+	ResourceType string
 }
 
-func NewBucket(config BucketSpec) Bucket {
+func NewBucket(name string, spec BucketSpec) Bucket {
 	return Bucket{
-		SpecData: BucketSpec{
-			Key:    "bucket/" + config.Name,
-			Name:   config.Name,
-			Region: config.Region,
-		},
-		DependsOn: []string{},
+		BucketName:   name,
+		BucketKey:    "bucket/" + name,
+		SpecData:     spec,
+		DependsOn:    []string{},
+		CreatedAt:    time.Now(),
+		ResourceType: "bucket",
 	}
 }
 
 func (b Bucket) Key() string {
 
-	return "bucket/" + b.SpecData.Name
+	return "bucket/" + b.BucketName
 }
 
 func (b Bucket) Name() string {
-	return b.SpecData.Name
+	return b.BucketName
 }
 
-func (b Bucket) GetSpec() Spec {
-	return b.SpecData
-}
-
-func (b Bucket) GetDependencies() []string {
+func (b Bucket) Dependencies() []string {
 	return b.DependsOn
 }
 
-func (b Bucket) ResourceType() string {
+func (b Bucket) Type() string {
 	return "bucket"
 }
-
-type BucketSpec struct {
-	Key        string
-	Name       string
-	Region     string
-	Versioning bool
-	Encryption string
-	Tags       map[string]string
-}
-
-func NewBucketSpec() BucketSpec {
-	return BucketSpec{
-		Name:       "",
-		Region:     "",
-		Versioning: false,
-		Encryption: "",
-		Tags:       nil,
-	}
-
-}
-
-func (b *BucketSpec) Error() string {
-	//TODO implement me
-	panic("implement me")
-}
-
-type BucketOutput struct {
-	Bucket *Bucket
-	Error  error
+func (b Bucket) Spec() Spec {
+	return b.SpecData.Get()
 }

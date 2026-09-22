@@ -3,7 +3,7 @@ package handlers
 import (
 	"context"
 	"errors"
-	"minicloudstack/internal/testutil"
+	"minicloudstack/internal/testutil/mock"
 	"testing"
 )
 
@@ -27,7 +27,7 @@ func TestHealthHandler_StoreReadiness(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			ctx := context.Background()
-			stateStore := testutil.NewFakeState(ctx, tt.stateErr)
+			stateStore := mock.NewFakeState(ctx, tt.stateErr)
 
 			handler := NewHealthHandler(stateStore)
 			got, _ := handler.state.Ready(ctx)

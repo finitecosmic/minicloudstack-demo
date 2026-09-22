@@ -1,4 +1,4 @@
-package testutil
+package mock
 
 import (
 	"context"
@@ -6,19 +6,27 @@ import (
 )
 
 type FakeMemory struct {
-	data map[string]model.Resource
-	ctx  context.Context
-	err  error
+	data  map[string]model.Resource
+	ctx   context.Context
+	ready bool
+	err   error
 }
 
 func NewFakeMemory(resources ...map[string]model.Resource) *FakeMemory {
-	return &FakeMemory{}
+	data := make(map[string]model.Resource)
+	for k, resource := range resources {
+		print(k, resource)
+	}
+	return &FakeMemory{
+		data: data,
+	}
 }
 
 func (m *FakeMemory) Save(ctx context.Context, key string, resource model.Resource) (model.Resource, error) {
 	if m.err != nil {
 		return nil, m.err
 	}
+
 	m.data[key] = resource
 	return m.data[key], nil
 }
@@ -48,5 +56,5 @@ func (m *FakeMemory) Ready(ctx context.Context) (bool, error) {
 	if m.err != nil {
 		return false, m.err
 	}
-	return true, nil
+	return m.ready, nil
 }

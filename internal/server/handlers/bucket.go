@@ -95,6 +95,7 @@ func (h *BucketHandler) Create(w http.ResponseWriter, r *http.Request) {
 	var name string
 	var region string
 	var err error
+	var bucket model.Resource
 
 	ctx := r.Context()
 
@@ -137,11 +138,9 @@ func (h *BucketHandler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	bucket, err := h.service.CreateBucket(ctx, model.BucketConfig{
-		Key:    "bucket/" + name,
-		Name:   name,
-		Region: region,
-	})
+	bucketSpec := model.NewBucketSpec(name, region)
+
+	bucket, err = h.service.CreateBucket(ctx, bucket.Key(), bucketSpec)
 
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -149,7 +148,7 @@ func (h *BucketHandler) Create(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.WriteHeader(http.StatusCreated)
-	w.Header().Set("Location", "/bucket"+bucket.Key())
+	w.Header().Set("Location", "/buckets/"+bucket.Key())
 
 }
 
