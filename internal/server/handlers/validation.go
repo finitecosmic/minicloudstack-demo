@@ -28,7 +28,6 @@ func isSupportedMediaType(contentType string) error {
 }
 
 func parseContentType(r *http.Request) (string, error) {
-
 	if err := isSupportedMediaType(r.Header.Get("Content-Type")); err != nil {
 		return "", err
 	}

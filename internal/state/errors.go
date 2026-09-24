@@ -12,5 +12,6 @@ var (
 	ErrResourceTypeMismatch    = errors.New("resource type mismatch")
 	ErrUnexpectedResourceType  = errors.New("unexpected resource type")
 	ErrUnsupportedResourceType = errors.New("unsupported resource type")
+	ErrMissingDeleteKey        = errors.New("missing delete key")
 	ErrMissingName             = errors.New("missing name")
 )

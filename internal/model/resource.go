@@ -1,5 +1,7 @@
 package model
 
+import "time"
+
 type Plan struct {
 	resources []Resource
 }
@@ -10,4 +12,5 @@ type Resource interface {
 	Dependencies() []string
 	Type() string
 	Spec() Spec
+	SetUpdatedAt(time.Time)
 }

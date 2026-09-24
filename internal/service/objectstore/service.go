@@ -5,7 +5,8 @@ import (
 )
 
 type Service struct {
-	state state.State
+	state        state.State
+	resourceType string
 }
 
 func New(stateStore state.State) *Service {

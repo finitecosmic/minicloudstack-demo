@@ -1,5 +1,7 @@
 package model
 
+import "time"
+
 type NetworkSpec struct {
 	Region string
 }
@@ -17,12 +19,17 @@ type Network struct {
 	CIDR         string
 	SpecData     NetworkSpec
 	ResourceType string
+	DependsOn    []string
+	CreatedAt    time.Time
+	UpdatedAt    time.Time
 }
 
 func NewNetwork(networkName string, networkSpec NetworkSpec) Network {
 	return Network{
 		NetworkName:  networkName,
-		ResourceType: "bucket",
+		ResourceType: ResourceTypeNetwork,
+		CreatedAt:    time.Now(),
+		UpdatedAt:    time.Now(),
 	}
 }
 
@@ -39,4 +46,8 @@ func (n *Network) Type() string {
 }
 func (n *Network) Spec() Spec {
 	return n.SpecData
+}
+
+func (n *Network) SetUpdatedAt(time.Time) {
+
 }

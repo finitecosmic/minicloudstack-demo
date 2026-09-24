@@ -13,4 +13,7 @@ var (
 	ErrInvalidJSON        = errors.New("invalid JSON")
 	ErrParseMediaType     = errors.New("error parsing media type")
 	ErrInvalidXML         = errors.New("invalid XML")
+	ErrParseXML           = errors.New("error parsing XML")
+	ErrInvalidUri         = errors.New("invalid uri")
+	ErrDeleteMissingKey   = errors.New("missing key")
 )

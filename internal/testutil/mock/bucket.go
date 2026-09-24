@@ -1,6 +1,9 @@
 package mock
 
-import "minicloudstack/internal/model"
+import (
+	"minicloudstack/internal/model"
+	"time"
+)
 
 type FakeBucket struct {
 	BucketName   string
@@ -57,6 +60,12 @@ func (b *FakeBucketSpec) Get() model.Spec {
 func (b *FakeBucketSpec) Error() string {
 	//TODO implement me
 	panic("implement me")
+}
+
+func (b *FakeBucket) SetUpdatedAt(time time.Time) {}
+
+func (b *FakeBucketSpec) Dependencies() []string {
+	return nil
 }
 
 type BucketOutput struct {

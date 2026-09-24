@@ -7,6 +7,7 @@ import (
 	"minicloudstack/internal/service/objectstore"
 	"net/http"
 	"path"
+	"regexp"
 	"strings"
 )
 
@@ -93,6 +94,7 @@ type DeleteBucketRequest struct {
 func (h *BucketHandler) Create(w http.ResponseWriter, r *http.Request) {
 	var contentType string
 	var name string
+	var key string
 	var region string
 	var err error
 	var bucket model.Resource
@@ -124,7 +126,11 @@ func (h *BucketHandler) Create(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "invalid xml", http.StatusBadRequest)
 			return
 		}
-
+		err = validateXmlPath(r.URL.Path)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
 		name = path.Base(r.URL.Path)
 		region = req.LocationConstraint
 	}
@@ -137,10 +143,13 @@ func (h *BucketHandler) Create(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "missing bucket region", http.StatusBadRequest)
 		return
 	}
+	if key == "" {
+		key = "bucket/" + name
+	}
 
 	bucketSpec := model.NewBucketSpec(name, region)
 
-	bucket, err = h.service.CreateBucket(ctx, bucket.Key(), bucketSpec)
+	bucket, err = h.service.CreateBucket(ctx, name, key, bucketSpec)
 
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -195,14 +204,46 @@ func (h *BucketHandler) Get(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *BucketHandler) Delete(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	name := r.PathValue("name")
 
-	err := h.service.DeleteBucket(ctx, name)
+	var err error
+
+	ctx := r.Context()
+
+	err = deleteValidation(w, r)
+	if err != nil {
+		http.Error(w, ErrInvalidUri.Error(), http.StatusBadRequest)
+	}
+	uri := r.RequestURI
+	key := strings.TrimPrefix(uri, "/")
+	err = h.service.DeleteBucket(ctx, key)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
+	w.WriteHeader(http.StatusNoContent)
 
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusAccepted)
+}
+
+func validateXmlPath(path string) error {
+	var keyPattern = regexp.MustCompile("/bucket/[^/]+$")
+	if !keyPattern.MatchString(path) {
+		return ErrInvalidUri
+	}
+	return nil
+}
+
+func isValidUri(r *http.Request, regexPattern string) (string, error) {
+	name := path.Base(r.RequestURI)
+
+	var keyPattern = regexp.MustCompile(regexPattern)
+	if !keyPattern.MatchString(name) {
+		return "", ErrInvalidUri
+	}
+	return name, nil
+}
+
+func deleteValidation(w http.ResponseWriter, r *http.Request) error {
+	if !strings.HasPrefix(r.RequestURI, "/bucket/") {
+		return ErrInvalidUri
+	}
+	return nil
 }

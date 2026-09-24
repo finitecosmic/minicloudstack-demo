@@ -6,53 +6,53 @@ import (
 )
 
 type FakeMemory struct {
-	data  map[string]model.Resource
+	Data  map[string]model.Resource
 	ctx   context.Context
 	ready bool
 	err   error
 }
 
-func NewFakeMemory(resources ...map[string]model.Resource) *FakeMemory {
+func NewFakeMemory() *FakeMemory {
 	data := make(map[string]model.Resource)
-	for k, resource := range resources {
-		print(k, resource)
-	}
+	ctx := context.Background()
+
 	return &FakeMemory{
-		data: data,
+		ctx:  ctx,
+		Data: data,
 	}
 }
 
-func (m *FakeMemory) Save(ctx context.Context, key string, resource model.Resource) (model.Resource, error) {
+func (m *FakeMemory) Save(_ context.Context, key string, resource model.Resource) (model.Resource, error) {
 	if m.err != nil {
 		return nil, m.err
 	}
 
-	m.data[key] = resource
-	return m.data[key], nil
+	m.Data[key] = resource
+	return m.Data[key], nil
 }
 
-func (m *FakeMemory) Get(ctx context.Context, key string) (model.Resource, error) {
+func (m *FakeMemory) Get(_ context.Context, key string) (model.Resource, error) {
 	if m.err != nil {
 		return nil, m.err
 	}
-	return m.data[key], nil
+	return m.Data[key], nil
 }
 
-func (m *FakeMemory) List(ctx context.Context) (map[string]model.Resource, error) {
+func (m *FakeMemory) List(_ context.Context) (map[string]model.Resource, error) {
 	if m.err != nil {
 		return nil, m.err
 	}
-	return m.data, nil
+	return m.Data, nil
 }
 
-func (m *FakeMemory) Delete(ctx context.Context, key string) error {
+func (m *FakeMemory) Delete(_ context.Context, key string) error {
 	if m.err != nil {
 		return m.err
 	}
 	return nil
 }
 
-func (m *FakeMemory) Ready(ctx context.Context) (bool, error) {
+func (m *FakeMemory) Ready(_ context.Context) (bool, error) {
 	if m.err != nil {
 		return false, m.err
 	}

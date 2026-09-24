@@ -20,7 +20,7 @@ func New() *Server {
 	memory := state.NewMemory()
 
 	//state injection
-	objectstoreService := objectstore.New(memory)
+	objectstoreService := objectstore.NewBucketService(memory)
 
 	bucketHandler := handlers.NewBucketHandler(objectstoreService)
 

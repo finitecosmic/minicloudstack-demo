@@ -7,6 +7,7 @@ import (
 	"maps"
 	"minicloudstack/internal/model"
 	"sync"
+	"time"
 )
 
 type Memory struct {
@@ -16,15 +17,9 @@ type Memory struct {
 	ctx          context.Context
 }
 
-func NewMemory(resourceType string, resources ...map[string]model.Resource) *Memory {
-	data := make(map[string]model.Resource, len(resources))
-
-	for _, resourceMap := range resources {
-		maps.Copy(data, resourceMap)
-	}
+func NewMemory() *Memory {
 	return &Memory{
-		Data:         data,
-		ResourceType: resourceType,
+		Data: make(map[string]model.Resource),
 	}
 }
 
@@ -32,6 +27,7 @@ func (m *Memory) Save(_ context.Context, key string, resource model.Resource) (m
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
+	resource.SetUpdatedAt(time.Now().UTC())
 	err := validate(resource, m.ResourceType)
 	if err != nil {
 		return nil, err
@@ -63,7 +59,9 @@ func (m *Memory) List(_ context.Context) (map[string]model.Resource, error) {
 func (m *Memory) Delete(_ context.Context, key string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-
+	if key == "" {
+		return ErrMissingDeleteKey
+	}
 	if _, ok := m.Data[key]; !ok {
 		return fmt.Errorf("resource %s  %q ", key, ErrResourceNotFound)
 	}
