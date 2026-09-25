@@ -209,7 +209,7 @@ func TestMemory_Delete(t *testing.T) {
 			err := memory.Delete(context.Background(), tt.deleteKey)
 
 			if err != nil && !strings.Contains(err.Error(), tt.wantErr.Error()) {
-				t.Errorf("Delete() error = %v, wantErr %v", err, tt.wantErr)
+				t.Fatalf("Delete() error = %v, wantErr %v", err, tt.wantErr)
 			}
 
 			if tt.wantPreserved {

@@ -14,4 +14,6 @@ var (
 	ErrUnsupportedResourceType = errors.New("unsupported resource type")
 	ErrMissingDeleteKey        = errors.New("missing delete key")
 	ErrMissingName             = errors.New("missing name")
+	ErrMissingResource         = errors.New("missing resource")
+	ErrSQLiteTableDoesNotExist = errors.New("sqlite table does not exist")
 )

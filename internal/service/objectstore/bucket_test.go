@@ -90,7 +90,7 @@ func TestService_CreateBucket(t *testing.T) {
 
 			gotBucket, err := svc.CreateBucket(ctx, tt.bucketName, tt.bucketKey, tt.bucketSpec)
 			if !errors.Is(err, tt.wantErr) {
-				t.Errorf("CreateBucket() error = %v, wantErr %v", err, tt.wantErr)
+				t.Fatalf("CreateBucket() error = %v, wantErr %v", err, tt.wantErr)
 			}
 
 			if gotBucket != nil && gotBucket.Name() != tt.wantName {
@@ -220,12 +220,12 @@ func TestService_DeleteBucket(t *testing.T) {
 			svc := New(memory)
 			err := svc.DeleteBucket(ctx, tt.deleteKey)
 			if !errors.Is(err, tt.wantErr) {
-				t.Errorf("DeleteBucket() error = %v, wantErr %v", err, tt.wantErr)
+				t.Fatalf("DeleteBucket() error = %v, wantErr %v", err, tt.wantErr)
 			}
 
 			for _, key := range tt.wantPreserved {
 				if _, err := memory.Get(ctx, key); err != nil {
-					t.Errorf("preserved resource %q does not exist: %v", key, err)
+					t.Fatalf("preserved resource %q does not exist: %v", key, err)
 				}
 			}
 		})
@@ -270,11 +270,11 @@ func TestService_GetBucket(t *testing.T) {
 
 			// Assert: error
 			if !errors.Is(err, tt.wantErr) {
-				t.Errorf("GetBucket() error = %v, wantErr %v", err, tt.wantErr)
+				t.Fatalf("GetBucket() error = %v, wantErr %v", err, tt.wantErr)
 			}
 			// Assert: result
 			if bucket != nil && bucket.Name() != tt.key {
-				t.Errorf("got: %s, want: %s", bucket.Name(), tt.key)
+				t.Fatalf("got: %s, want: %s", bucket.Name(), tt.key)
 			}
 		})
 	}
