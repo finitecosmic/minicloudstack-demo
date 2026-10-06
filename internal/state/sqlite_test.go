@@ -180,3 +180,70 @@ func testContext(setup func() context.Context) context.Context {
 	}
 	return setup()
 }
+
+func TestSQLiteState_Delete(t *testing.T) {
+	tests := []struct {
+		name       string
+		hasData    bool
+		data       string
+		deleteKey  string
+		query      string
+		expectRows int
+		wantErr    error
+	}{
+		{
+			name:    "delete existing resource",
+			hasData: true,
+			data: `INSERT INTO resources (id, key, resource_type, version, data)
+			VALUES
+				('id-1', 'bucket/foo', 'bucket', 1, '{"name":"foo"}'),
+				('id-2', 'bucket/bar', 'bucket', 1, '{"name":"bar"}'),
+				('id-3', 'bucket/baz', 'bucket', 1, '{"name":"baz"}');`,
+			query:      `DELETE FROM resources WHERE id = 'id-1';`,
+			deleteKey:  "id-1",
+			wantErr:    state.ErrResourceNotFound,
+			expectRows: 2,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var ctx context.Context
+			var err error
+
+			ctx, cancel := context.WithTimeout(
+				context.Background(),
+				5*time.Second,
+			)
+			defer cancel()
+
+			//setup: open
+			db, _ := sql.Open("sqlite3", ":memory:")
+			defer db.Close()
+
+			//new instance of sqlite3
+			db.SetMaxOpenConns(1)
+			store := state.NewSQLiteState(db)
+
+			// init with context
+			if err = store.InitDB(ctx); err != nil {
+				t.Fatalf("Init() error = %v", err)
+			}
+
+			// prepopulate db
+			if tt.hasData {
+				_, err := db.ExecContext(ctx, tt.data)
+				if err != nil {
+					t.Fatalf("dataQuery error = %v", err)
+				}
+			}
+			err = store.Delete(ctx, tt.query)
+			if !errors.Is(err, tt.wantErr) {
+				t.Fatalf("Delete() error = %v, wantErr = %v", err, tt.wantErr)
+			}
+			_, err = store.Get(ctx, tt.deleteKey)
+			if !errors.Is(err, state.ErrResourceNotFound) {
+				t.Fatalf("Get() error = %v, want ErrNotFound", err)
+			}
+		})
+	}
+}
