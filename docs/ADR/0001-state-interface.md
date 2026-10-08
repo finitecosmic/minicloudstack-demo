@@ -1,10 +1,7 @@
-# State Interface
+# ADR-0001: State Interface
 
-## Status
-- Accepted
-
-## Date
-2026-10-05
+- Status: Accepted
+- Date: 2026-10-05 
 
 ## Context
 Introduces a generic `State` interface to abstract resource persistence. 

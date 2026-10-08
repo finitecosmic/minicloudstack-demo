@@ -1,10 +1,7 @@
-# ADR-0002: Use SQLite for Persistent State
+# ADR-0002:  SQLite for Persistent State
 
-## Status
-- Accepted
-
-## Date
-2026-10-05
+- Status: Accepted
+- Date: 2026-10-05
 
 ## Context
 - The initial implementation stored resources in-mem, state is 
@@ -70,4 +67,4 @@ The application will interact with a generic `State` interface:
 - 0001-state-interface.md
 
 ## Implementation Status
-- Implemented 
+- Implemented

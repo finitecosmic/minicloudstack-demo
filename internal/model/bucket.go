@@ -2,9 +2,11 @@ package model
 
 import "time"
 
+const BucketVersion = 1
+
 type Bucket struct {
-	BucketName   string `json:"name" xml:"name""`
-	BucketKey    string `json:"key" xml:"key"`
+	BucketName   string     `json:"name" xml:"name""`
+	BucketKey    string     `json:"key" xml:"key"`
 	SpecData     BucketSpec `json:"spec" xml:"spec"`
 	DependsOn    []string   `json:"depends_on" xml:"depends_on"`
 	CreatedAt    time.Time
@@ -39,6 +41,7 @@ func (b Bucket) Dependencies() []string {
 func (b Bucket) Type() string {
 	return "bucket"
 }
+
 func (b Bucket) Spec() Spec {
 	return b.SpecData.Get()
 }
