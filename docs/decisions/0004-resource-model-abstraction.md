@@ -12,7 +12,7 @@ a bucket without needing to know whether the state is backed by memory, SQLite, 
 ## Rationale
 The state layer should be able to operate on different resources through a common abstraction.
 Without a common interface `Resource`, each state would have to implement duplicate logic for each resource.
-This is better know as the `Strategy` design pattern.
+This is better known as the `Strategy` design pattern.
 
 ```
              model.Resource 
