@@ -20,19 +20,22 @@ func TestSQLiteState_Init(t *testing.T) {
 
 	ctx := context.Background()
 	db, err := sql.Open("sqlite3", ":memory:")
-
 	if err != nil {
-		t.Fatal(err)
+		t.Fatal("failed to open database:", err)
 	}
+	defer func() {
+		if err := db.Close(); err != nil {
+			t.Error("failed to close database:", err)
+		}
+	}()
 
+	db.SetMaxOpenConns(1)
 	s := state.NewSQLiteState(db)
 
 	err = s.InitDB(context.Background())
 	if err != nil {
-		t.Fatal(err)
+		t.Errorf("InitDB err: %v", err)
 	}
-
-	db.SetMaxOpenConns(1)
 
 	err = db.QueryRowContext(ctx, `
 		SELECT name
@@ -42,7 +45,7 @@ func TestSQLiteState_Init(t *testing.T) {
 		`).Scan(&tableName)
 
 	if err != nil {
-		t.Fatalf("sqlite init table: %v", err)
+		t.Errorf("sqlite init table: %v", err)
 	}
 
 }
@@ -146,23 +149,24 @@ func TestSQLiteState_Save(t *testing.T) {
 			// open the db
 			db, err := sql.Open(driverName, tt.dataSourceName)
 			if err != nil {
-				t.Fatalf("Open(): %v", err)
+				t.Errorf("Open(): %v", err)
 			}
 
 			// defer close db and handle error
 			defer func() {
 				if err := db.Close(); err != nil {
-					t.Fatalf("Close(): %v", err)
+					t.Errorf("Close(): %v", err)
 				}
 			}()
 
 			// New State
+			db.SetMaxOpenConns(1)
 			store := state.NewSQLiteState(db)
 
 			// Initialize schema
-			err = store.InitDB(ctx)
+			err = store.InitDB(context.Background())
 			if err = store.InitDB(context.Background()); err != nil {
-				t.Fatalf("Init() error = %v", err)
+				t.Errorf("Init() error = %v", err)
 			}
 
 			// Populate data
@@ -258,15 +262,19 @@ func TestSQLiteState_Delete(t *testing.T) {
 
 			//setup: open
 			db, _ := sql.Open("sqlite3", ":memory:")
-			defer db.Close()
+			defer func() {
+				if err := db.Close(); err != nil {
+					t.Errorf("Close(): %v", err)
+				}
+			}()
 
 			//new instance of sqlite3
 			db.SetMaxOpenConns(1)
 			store := state.NewSQLiteState(db)
 
 			// init with context
-			if err := store.InitDB(ctx); err != nil {
-				t.Fatalf("Init() error = %v", err)
+			if err := store.InitDB(context.Background()); err != nil {
+				t.Errorf("Init() error = %v", err)
 			}
 
 			// prepopulate db
@@ -290,10 +298,10 @@ func TestSQLiteState_Delete(t *testing.T) {
 
 func TestSQLiteState_List(t *testing.T) {
 	tests := []struct {
-		name    string
-		hasData bool
-		data    string
-
+		name       string
+		hasData    bool
+		data       string
+		setupCtx   func() (context.Context, context.CancelFunc)
 		query      string
 		expectRows int
 		wantErr    error
@@ -313,28 +321,45 @@ func TestSQLiteState_List(t *testing.T) {
 			name:       "List empty resource",
 			expectRows: 0,
 		},
+		{
+			name:    "context cancelled",
+			hasData: true,
+			data:    `INSERT INTO resources (key, resource_type, version, data) VALUES ('bucket/existing-bucket', 'bucket', 1, '{"name":"existing-bucket","key":"bucket/existing-bucket"}')`,
+			setupCtx: func() (context.Context, context.CancelFunc) {
+				ctx, cancel := context.WithCancel(context.Background())
+				cancel()
+				return ctx, cancel
+			},
+			wantErr: context.Canceled,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			var err error
+			cancelFunc := func() {}
 
-			ctx, cancel := context.WithTimeout(
-				context.Background(),
-				5*time.Second,
-			)
-			defer cancel()
+			ctx := context.Background()
+
+			if tt.setupCtx != nil {
+				ctx, cancelFunc = tt.setupCtx()
+			}
+			defer cancelFunc()
 
 			//setup: open
 			db, _ := sql.Open("sqlite3", ":memory:")
-			defer db.Close()
+			defer func() {
+				if err := db.Close(); err != nil {
+					t.Errorf("Close() error = %v", err)
+				}
+			}()
 
 			//new instance of sqlite3
 			db.SetMaxOpenConns(1)
 			store := state.NewSQLiteState(db)
 
 			// init with context
-			if err = store.InitDB(ctx); err != nil {
-				t.Fatalf("Init() error = %v", err)
+			if err = store.InitDB(context.Background()); err != nil {
+				t.Errorf("Init() error = %v", err)
 			}
 
 			// prepopulate db
@@ -346,14 +371,13 @@ func TestSQLiteState_List(t *testing.T) {
 			}
 
 			resources, err := store.List(ctx)
+			
 			if !errors.Is(err, tt.wantErr) {
 				t.Fatalf("List() error = %v, wantErr = %v", err, tt.wantErr)
 			}
-
-			if len(resources) != tt.expectRows {
-				t.Fatalf("List() got = %v, want = %v", len(resources), tt.expectRows)
+			if tt.wantErr == nil && len(resources) != tt.expectRows {
+				t.Errorf("List() got rows= %v, want rows= %v", len(resources), tt.expectRows)
 			}
-
 		})
 	}
 }
@@ -425,13 +449,17 @@ func TestSQLiteState_Get(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Open() error = %v", err)
 			}
-			defer db.Close()
+			defer func() {
+				if err := db.Close(); err != nil {
+					t.Fatalf("Close(): %v", err)
+				}
+			}()
 
 			db.SetMaxOpenConns(1)
 			store := state.NewSQLiteState(db)
 
 			// initial db with context
-			if err = store.InitDB(ctx); err != nil {
+			if err = store.InitDB(context.Background()); err != nil {
 				t.Fatalf("Init() error = %v", err)
 			}
 
