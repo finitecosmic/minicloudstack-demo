@@ -1,16 +1,24 @@
 package state
 
 const (
+	schemaVersionV1      = 1
+	schemaVersionV2      = 2
+	currentSchemaVersion = schemaVersionV2
+
+	MsgSchemaAlreadyCurrent = "database schema is already current"
+
+	// Queries
 	createResourceTable = `
 	CREATE TABLE IF NOT EXISTS resources (
 		id TEXT PRIMARY KEY,
-		key VARCHAR(255),
+		key TEXT,
 		resource_type TEXT NOT NULL,
 		version INTEGER NOT NULL,
 		data BLOB NOT NULL,
-		created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-		updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+		created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+		updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 	)`
+
 	insertResource = `
 	INSERT INTO resources (
 		id,
@@ -20,4 +28,8 @@ const (
 		data
 	)
 	VALUES (?, ?, ?, ?, ?);`
+
+	listResources = `SELECT key, resource_type, version, data from resources`
+
+	migrateV1toV2 = `ALTER TABLE resources ADD COLUMN TEXT NOT NULL DEFAULT ''`
 )

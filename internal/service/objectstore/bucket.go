@@ -86,7 +86,7 @@ func bucketExists(ctx context.Context, state state.State, key string) (bool, err
 	return true, nil
 }
 
-func validateBucketCreation(ctx context.Context, state state.State, name string, key string) error {
+func validateBucketCreation(_ context.Context, _ state.State, name string, key string) error {
 	if name == "" {
 		return ErrBucketNameRequired
 	}

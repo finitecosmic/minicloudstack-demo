@@ -4,8 +4,10 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"minicloudstack/internal/model"
 	"minicloudstack/internal/state"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
@@ -14,8 +16,7 @@ import (
 	_ "github.com/mattn/go-sqlite3"
 )
 
-func TestSQLiteState_Init(t *testing.T) {
-	t.Parallel()
+func TestSQLiteState_InitDB(t *testing.T) {
 	var tableName string
 
 	ctx := context.Background()
@@ -34,7 +35,7 @@ func TestSQLiteState_Init(t *testing.T) {
 
 	err = s.InitDB(context.Background())
 	if err != nil {
-		t.Errorf("InitDB err: %v", err)
+		t.Fatalf("InitDB err: %v", err)
 	}
 
 	err = db.QueryRowContext(ctx, `
@@ -46,6 +47,205 @@ func TestSQLiteState_Init(t *testing.T) {
 
 	if err != nil {
 		t.Errorf("sqlite init table: %v", err)
+	}
+
+}
+
+func TestSqliteState_InitDB_SchemaCreation(t *testing.T) {
+	ctx := context.Background()
+
+	_, db := newTestSqliteState(t)
+
+	rows, err := db.QueryContext(ctx, "PRAGMA table_info('resources')")
+	if err != nil {
+		t.Fatalf("failed to execute query: %v", err)
+	}
+	defer rows.Close()
+
+	got := make(map[string]string)
+	for rows.Next() {
+		var (
+			cid        int
+			name       string
+			dataType   string
+			notNull    int
+			defaultVal sql.NullString
+			primaryKey int
+		)
+
+		if err := rows.Scan(&cid, &name, &dataType, &notNull, &defaultVal, &primaryKey); err != nil {
+			t.Errorf("failed to scan row: %v", err)
+		}
+		got[name] = strings.ToUpper(dataType)
+	}
+	if err := rows.Err(); err != nil {
+		t.Errorf("rows err: %v", err)
+	}
+
+	want := map[string]string{
+		"id":            "TEXT",
+		"key":           "TEXT",
+		"resource_type": "TEXT",
+		"version":       "INTEGER",
+		"data":          "BLOB",
+		"created_at":    "DATETIME",
+		"updated_at":    "DATETIME",
+	}
+
+	for column, wantType := range want {
+		gotType, ok := got[column]
+		if !ok {
+			t.Errorf("column %q not found", column)
+			continue
+		}
+		if gotType != wantType {
+			t.Errorf("column %s: got %v, want %v", column, gotType, wantType)
+		}
+	}
+	if len(got) != len(want) {
+		t.Errorf("got %d rows, want %d", len(got), len(want))
+	}
+}
+
+func TestSqliteState_InitDB_Idempotent(t *testing.T) {
+	ctx := context.Background()
+	store, _ := newTestSqliteState(t)
+
+	bucket := &model.Bucket{
+		BucketName: "bucket",
+	}
+	key := bucket.Key()
+	if err := store.Save(ctx, key, bucket); err != nil {
+		t.Fatalf("failed to save bucket: %v", err)
+	}
+
+	// initdb again
+	if err := store.InitDB(ctx); err != nil {
+		t.Fatalf("idempotent failed to initdb again: %v", err)
+	}
+
+	got, err := store.Get(ctx, key)
+	if err != nil {
+		t.Fatalf("failed to Get() bucket: %v", err)
+	}
+	if got == nil {
+		t.Fatalf("bucket got nil, want non-nil")
+	}
+
+	if got.Key() != key {
+		t.Fatalf("bucket key: got %v, want %v", got.Key(), key)
+	}
+}
+
+func TestSQLiteState_Migrate_V1ToV2(t *testing.T) {
+	tests := []struct {
+		name        string
+		version     int
+		setUpQuery  string
+		setupArgs   []any
+		wantColumns map[string]bool
+		wantLog     string
+		wantErr     error
+	}{
+		{
+			name:    "migrate already current",
+			wantLog: state.MsgSchemaAlreadyCurrent,
+			version: 2,
+		},
+		{
+			name:    "migrate unsupported version",
+			version: 3,
+			wantErr: state.ErrUnsupportedVersion,
+		},
+		{
+			name:    "migrate from v1 to v2",
+			version: 1,
+			wantColumns: map[string]bool{
+				"description": true,
+			},
+			setUpQuery: `INSERT INTO resources (
+					id,
+					key,
+					resource_type,
+					version,
+					data
+				)
+				VALUES (?, ?, ?, ?, ?);`,
+
+			setupArgs: []any{
+				"id-1",
+				"bucket/foo",
+				model.ResourceTypeBucket,
+				1,
+				[]byte(`{"name":"foo"}`),
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx := context.Background()
+			schemaV1 := `CREATE TABLE IF NOT EXISTS resources (
+		id TEXT PRIMARY KEY,
+		key TEXT,
+		resource_type TEXT NOT NULL,
+		version INTEGER NOT NULL,
+		data BLOB NOT NULL,
+		created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+		updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+	)`
+
+			state, db := newTestSqliteState(t)
+			err := state.Migrate(ctx)
+			if err != nil {
+
+				if tt.wantErr != nil && !strings.Contains(err.Error(), tt.wantErr.Error()) {
+					t.Fatalf("migrate v1 to v2: %v", err)
+				}
+			}
+			t.Cleanup(func() {
+				if err := db.Close(); err != nil {
+					t.Errorf("db.Close() error = %v", err)
+				}
+			})
+
+			_, err = db.ExecContext(ctx, schemaV1)
+			if err != nil {
+				t.Errorf("failure to load schema v1 %v", err)
+			}
+
+			_, err = db.ExecContext(ctx, fmt.Sprintf("PRAGMA user_version = %d", tt.version))
+			if err != nil {
+				t.Errorf("failed to execute PRAGMA user_version: %v", err)
+			}
+
+			err = state.Migrate(ctx)
+			if err != nil && tt.wantErr != nil {
+				if !strings.Contains(err.Error(), tt.wantErr.Error()) {
+					t.Fatalf("migrate v1 to v2: %v", err)
+				}
+			}
+
+			// Assert: schema version updated
+			var gotVersion int
+			err = db.QueryRowContext(ctx, `PRAGMA user_version`).Scan(&gotVersion)
+			if err != nil {
+				t.Errorf("failed to query PRAGMA user_version: %v", err)
+			}
+			if gotVersion != tt.version {
+				t.Fatalf("got %d, want %d", gotVersion, tt.version)
+			}
+
+			// Insert Query
+			if tt.setupArgs != nil {
+				_, err := db.ExecContext(ctx, tt.setUpQuery, tt.setupArgs...)
+				if err != nil {
+					t.Errorf("failed to execute setup query: %v", err)
+				}
+			}
+			// Assert: new column exists
+			db.QueryRowContext(ctx, `PRAGMA user_version`).Scan(&gotVersion)
+		})
 	}
 
 }
@@ -76,6 +276,7 @@ func TestSQLiteState_Save(t *testing.T) {
 			hasData:         true,
 			dataQuery:       `INSERT INTO resources (key, resource_type, version, data) VALUES ('bucket/existing-bucket', 'existing-bucket', 1, '{"name":"existing-bucket","key":"bucket/existing-bucket"}')`,
 			resourceType:    model.ResourceTypeBucket,
+			resourceKey:     "bucket/existing-bucket",
 			resource:        model.NewBucket("new-bucket", model.BucketSpec{}),
 			wantRecordCount: 2,
 		},
@@ -84,6 +285,7 @@ func TestSQLiteState_Save(t *testing.T) {
 			dataSourceName:  ":memory:",
 			dataQuery:       `INSERT INTO resources (key, resource_type, version, data) VALUES ('bucket/existing-bucket', 'existing-bucket', 1, '{"name":"existing-bucket","key":"bucket/existing-bucket"}')`,
 			resourceType:    model.ResourceTypeBucket,
+			resourceKey:     "bucket/existing-bucket",
 			resource:        model.NewBucket("existing-bucket", model.BucketSpec{}),
 			wantRecordCount: 1,
 		},
@@ -93,6 +295,7 @@ func TestSQLiteState_Save(t *testing.T) {
 			dataQuery:      `INSERT INTO resources (key, resource_type, version, data) VALUES ('bucket/existing-bucket', 'existing-bucket', 1, '{"name":"existing-bucket","key":"bucket/existing-bucket"}')`,
 			resourceType:   model.ResourceTypeBucket,
 			resource:       model.NewBucket("existing-bucket", model.BucketSpec{}),
+			resourceKey:    "bucket/existing-bucket",
 			setupCtx: func() (context.Context, context.CancelFunc) {
 				ctx, cancel := context.WithCancel(context.Background())
 				cancel()
@@ -109,6 +312,7 @@ func TestSQLiteState_Save(t *testing.T) {
 
 				return ctx, cancel
 			},
+			resourceKey:     "bucket/existing-bucket",
 			wantErr:         context.DeadlineExceeded,
 			wantRecordCount: 0,
 		},
@@ -146,13 +350,11 @@ func TestSQLiteState_Save(t *testing.T) {
 			}
 			defer cancelFunc()
 
-			// open the db
 			db, err := sql.Open(driverName, tt.dataSourceName)
 			if err != nil {
 				t.Errorf("Open(): %v", err)
 			}
 
-			// defer close db and handle error
 			defer func() {
 				if err := db.Close(); err != nil {
 					t.Errorf("Close(): %v", err)
@@ -163,13 +365,13 @@ func TestSQLiteState_Save(t *testing.T) {
 			db.SetMaxOpenConns(1)
 			store := state.NewSQLiteState(db)
 
-			// Initialize schema
+			// 1. Create DB
 			err = store.InitDB(context.Background())
 			if err = store.InitDB(context.Background()); err != nil {
 				t.Errorf("Init() error = %v", err)
 			}
 
-			// Populate data
+			// 2. Initialize schema
 			if tt.hasData {
 				_, err := db.ExecContext(ctx, tt.dataQuery)
 				if err != nil {
@@ -177,7 +379,7 @@ func TestSQLiteState_Save(t *testing.T) {
 				}
 			}
 
-			// Test Case
+			// 3. Test context
 			err = store.Save(ctx, tt.resourceKey, tt.resource)
 
 			if !errors.Is(err, tt.wantErr) {
@@ -188,7 +390,7 @@ func TestSQLiteState_Save(t *testing.T) {
 				)
 			}
 
-			// Expected number of row entries
+			// 4.Query row count independent of test
 			db.QueryRowContext(ctx, `SELECT COUNT(*) FROM resources`).Scan(&count)
 			if count != tt.wantRecordCount {
 				t.Fatalf("Save() got = %v, want = %v",
@@ -213,7 +415,6 @@ func TestSQLiteState_Delete(t *testing.T) {
 		hasData    bool
 		data       string
 		deleteKey  string
-		query      string
 		expectRows int
 		wantErr    error
 	}{
@@ -222,12 +423,10 @@ func TestSQLiteState_Delete(t *testing.T) {
 			hasData: true,
 			data: `INSERT INTO resources (id, key, resource_type, version, data)
 			VALUES
-				('id-1', 'bucket/foo', 'bucket', 1, '{"name":"foo"}'),
-				('id-2', 'bucket/bar', 'bucket', 1, '{"name":"bar"}'),
-				('id-3', 'bucket/baz', 'bucket', 1, '{"name":"baz"}');`,
-			query:      `DELETE FROM resources WHERE id = 'id-1';`,
-			deleteKey:  "id-1",
-			wantErr:    state.ErrResourceNotFound,
+				('id-1', 'bucket/foo', 'bucket', 1, '{"key":"bucket/foo"}'),
+				('id-2', 'bucket/bar', 'bucket', 1, '{"key":"bucket/bar"}'),
+				('id-3', 'bucket/baz', 'bucket', 1, '{"key":"bucket/baz"}');`,
+			deleteKey:  "bucket/baz",
 			expectRows: 2,
 		},
 		{
@@ -237,15 +436,13 @@ func TestSQLiteState_Delete(t *testing.T) {
 			VALUES
 				('id-2', 'bucket/bar', 'bucket', 1, '{"name":"bar"}'),
 				('id-3', 'bucket/baz', 'bucket', 1, '{"name":"baz"}');`,
-			query:      `DELETE FROM resources WHERE id = 'id-1';`,
-			deleteKey:  "id-1",
+			deleteKey:  "bucket/foo",
 			wantErr:    state.ErrResourceNotFound,
 			expectRows: 2,
 		},
 		{
 			name:       "delete empty",
-			query:      `DELETE FROM resources WHERE id = 'id-1';`,
-			deleteKey:  "id-1",
+			deleteKey:  "bucket/foo",
 			wantErr:    state.ErrResourceNotFound,
 			expectRows: 2,
 		},
@@ -284,7 +481,7 @@ func TestSQLiteState_Delete(t *testing.T) {
 					t.Fatalf("dataQuery error = %v", err)
 				}
 			}
-			err := store.Delete(ctx, tt.query)
+			err := store.Delete(ctx, tt.deleteKey)
 			if !errors.Is(err, tt.wantErr) {
 				t.Fatalf("Delete() error = %v, wantErr = %v", err, tt.wantErr)
 			}
@@ -424,13 +621,29 @@ func TestSQLiteState_Get(t *testing.T) {
 			wantErr: state.ErrUnmarshalResource,
 		},
 		{
-			name: "unknown resource version",
+			name: "unsupported resource version",
 			data: `INSERT INTO resources (id, key, resource_type, version, data)
    			VALUES
-			    ('id-1', 'bucket/bar', 'bucket', 1, 'invalid json');`,
+			    ('id-1', 'bucket/bar', 'bucket', 999, 'invalid json');`,
 			hasData: true,
 			getKey:  "bucket/bar",
-			wantErr: state.ErrUnmarshalResource,
+			wantErr: state.ErrUnsupportedVersion,
+		},
+		{
+			name:    "supported resource version",
+			hasData: true,
+			data: `INSERT INTO resources(id, key, resource_type, version, data)
+					VALUES (
+						'id-1',
+						'bucket/bar',
+						'bucket',
+						1,
+						'{"name":"bar"}'
+					);`,
+			getKey: "bucket/bar",
+			want: model.Bucket{
+				BucketName: "bar",
+			},
 		},
 		{
 			name:    "get empty",
@@ -473,15 +686,7 @@ func TestSQLiteState_Get(t *testing.T) {
 
 			got, err := store.Get(ctx, tt.getKey)
 
-			// expected an error
-			if !errors.Is(err, tt.wantErr) {
-				t.Fatalf("Get() error = %v, want ErrResourceNotFound", err)
-			}
-
 			if tt.wantErr != nil {
-				if got != nil {
-					t.Fatalf("Get() got = %v, want nil", got)
-				}
 				if !strings.Contains(err.Error(), tt.wantErr.Error()) {
 					t.Fatalf(
 						"Get() error = %q, want error containing %q",
@@ -489,13 +694,68 @@ func TestSQLiteState_Get(t *testing.T) {
 						tt.wantErr,
 					)
 				}
+
+				if got != nil {
+					t.Fatalf("Get() got = %v, want nil", got)
+				}
 				return
 			}
 
-			t.Logf("Get() got = %v", got.Key())
+			// success
+			if got == nil {
+				t.Fatalf("Get() got %v, want non-nil", got)
+			}
+
 			if !reflect.DeepEqual(got, tt.want) {
 				t.Fatalf("Get() got = %#v, want %#v", got, tt.want)
 			}
 		})
 	}
+}
+
+func newTestSqliteState(t *testing.T) (*state.SQLiteState, *sql.DB) {
+	t.Helper()
+
+	dbPath := filepath.Join(t.TempDir(), "sqlite.db")
+	db, err := sql.Open("sqlite3", dbPath)
+	if err != nil {
+		t.Errorf("NewSQLiteState() error = %v", err)
+	}
+	store := state.NewSQLiteState(db)
+	if err := store.InitDB(context.Background()); err != nil {
+		t.Errorf("InitDB() error = %v", err)
+	}
+
+	t.Cleanup(func() {
+		if err := db.Close(); err != nil {
+			t.Errorf("Close() error = %v", err)
+		}
+	})
+	return store, db
+}
+
+func hasColumn(ctx context.Context, t *testing.T, db *sql.DB, columnName string) (bool, error) {
+	t.Helper()
+	rows, err := db.QueryContext(ctx, fmt.Sprintf("PRAGMA table_info(%s)", columnName))
+	if err != nil {
+		t.Errorf("table_info hasColumn() error = %v", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var (
+			cid        int
+			name       string
+			dataType   string
+			notNull    int
+			defaultVal sql.NullString
+			primaryKey int
+		)
+		if err := rows.Scan(&cid, &name, &dataType, &notNull, &defaultVal, &primaryKey); err != nil {
+			t.Errorf("table_info hasColumn() error = %v", err)
+		}
+		if name == columnName {
+			return true, nil
+		}
+	}
+	return false, state.ErrColumnDoesNotExist
 }

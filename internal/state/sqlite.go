@@ -6,17 +6,23 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
+	"log/slog"
 	"minicloudstack/internal/model"
 
 	"github.com/google/uuid"
 )
 
 type SQLiteState struct {
-	db *sql.DB
+	db     *sql.DB
+	logger *slog.Logger
 }
 
 func NewSQLiteState(db *sql.DB) *SQLiteState {
-	return &SQLiteState{db: db}
+	return &SQLiteState{
+		db:     db,
+		logger: slog.Default(),
+	}
 }
 
 func (s *SQLiteState) InitDB(ctx context.Context) error {
@@ -45,10 +51,11 @@ func (s *SQLiteState) Save(ctx context.Context, key string, resource model.Resou
 		insertResource,
 		id,
 		key,
-		model.BucketVersion,
 		resourceType,
+		model.BucketVersion,
 		data,
 	)
+
 	if err != nil {
 		return fmt.Errorf("save resource %q: %w", key, err)
 	}
@@ -78,15 +85,12 @@ func (s *SQLiteState) Get(ctx context.Context, key string) (model.Resource, erro
 	if err != nil {
 		return nil, err
 	}
+
 	return resource, nil
 }
 
 func (s *SQLiteState) List(ctx context.Context) (map[string]model.Resource, error) {
-
-	const query = `
-	SELECT key, resource_type, version, data from resources`
-
-	rows, err := s.db.QueryContext(ctx, query)
+	rows, err := s.db.QueryContext(ctx, listResources)
 	if err != nil {
 		return nil, fmt.Errorf("list resources: %w", err)
 	}
@@ -136,6 +140,43 @@ func (s *SQLiteState) Delete(ctx context.Context, key string) error {
 	return nil
 }
 
+func (s *SQLiteState) Migrate(ctx context.Context) error {
+	var version int
+
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("%w %w", ErrBeginTransaction, err)
+	}
+	defer tx.Rollback() //rollback if not commit, atomic
+
+	if err := tx.QueryRowContext(ctx, "PRAGMA user_version").Scan(&version); err != nil {
+		return fmt.Errorf("%w %w", ErrQueryRowContext, err)
+	}
+
+	log.Printf("migrated sqlite state version %d", version)
+
+	switch version {
+	case schemaVersionV1:
+		if _, err := tx.ExecContext(ctx, migrateV1toV2); err != nil {
+			return fmt.Errorf("%w %w", ErrMigrateV1toV2, err)
+		}
+
+		if _, err := tx.ExecContext(ctx, "PRAGMA user_version = ?", currentSchemaVersion); err != nil {
+			return fmt.Errorf("%w %w", ErrSetSchemaVersion, err)
+		}
+	case schemaVersionV2:
+		s.logger.InfoContext(ctx, "%d", MsgSchemaAlreadyCurrent, currentSchemaVersion)
+	default:
+		return fmt.Errorf("%w %d", ErrUnsupportedVersion, version)
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("%w %w", ErrTxCommit, err)
+	}
+
+	return nil
+}
+
 func (s *SQLiteState) Ready(ctx context.Context) (bool, error) {
 	if err := s.db.PingContext(ctx); err != nil {
 		return false, err
@@ -163,6 +204,6 @@ func decodeBucket(data []byte, version int) (model.Resource, error) {
 		}
 		return bucket, nil
 	default:
-		return nil, fmt.Errorf(`unknown resource version %d`, version)
+		return nil, fmt.Errorf(`%s %d`, ErrUnsupportedVersion, version)
 	}
 }
