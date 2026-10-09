@@ -371,7 +371,7 @@ func TestSQLiteState_List(t *testing.T) {
 			}
 
 			resources, err := store.List(ctx)
-			
+
 			if !errors.Is(err, tt.wantErr) {
 				t.Fatalf("List() error = %v, wantErr = %v", err, tt.wantErr)
 			}
