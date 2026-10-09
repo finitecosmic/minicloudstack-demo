@@ -364,7 +364,7 @@ func TestSQLiteState_List(t *testing.T) {
 
 			// prepopulate db
 			if tt.hasData {
-				_, err := db.ExecContext(ctx, tt.data)
+				_, err := db.ExecContext(context.Background(), tt.data)
 				if err != nil {
 					t.Fatalf("dataQuery error = %v", err)
 				}
