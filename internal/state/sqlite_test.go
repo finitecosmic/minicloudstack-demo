@@ -226,7 +226,7 @@ func TestSQLiteState_Migrate_V1ToV2(t *testing.T) {
 				}
 			}
 
-			// Assert: schema version updated
+			// assert: schema version updated
 			var gotVersion int
 			err = db.QueryRowContext(ctx, `PRAGMA user_version`).Scan(&gotVersion)
 			if err != nil {
@@ -236,15 +236,16 @@ func TestSQLiteState_Migrate_V1ToV2(t *testing.T) {
 				t.Fatalf("got %d, want %d", gotVersion, tt.version)
 			}
 
-			// Insert Query
+			// query
 			if tt.setupArgs != nil {
 				_, err := db.ExecContext(ctx, tt.setUpQuery, tt.setupArgs...)
 				if err != nil {
 					t.Errorf("failed to execute setup query: %v", err)
 				}
 			}
-			// Assert: new column exists
-			db.QueryRowContext(ctx, `PRAGMA user_version`).Scan(&gotVersion)
+
+			// assert: new column exists
+			columns, err := hasColumns(ctx, t, db, tt.wantColumns)
 		})
 	}
 
@@ -734,13 +735,15 @@ func newTestSqliteState(t *testing.T) (*state.SQLiteState, *sql.DB) {
 	return store, db
 }
 
-func hasColumn(ctx context.Context, t *testing.T, db *sql.DB, columnName string) (bool, error) {
+func hasColumns(ctx context.Context, t *testing.T, db *sql.DB, columnName string) (map[string]bool, error) {
 	t.Helper()
 	rows, err := db.QueryContext(ctx, fmt.Sprintf("PRAGMA table_info(%s)", columnName))
 	if err != nil {
 		t.Errorf("table_info hasColumn() error = %v", err)
 	}
 	defer rows.Close()
+
+	columns := make(map[string]bool)
 	for rows.Next() {
 		var (
 			cid        int
@@ -753,9 +756,7 @@ func hasColumn(ctx context.Context, t *testing.T, db *sql.DB, columnName string)
 		if err := rows.Scan(&cid, &name, &dataType, &notNull, &defaultVal, &primaryKey); err != nil {
 			t.Errorf("table_info hasColumn() error = %v", err)
 		}
-		if name == columnName {
-			return true, nil
-		}
+		columns[name] = true
 	}
-	return false, state.ErrColumnDoesNotExist
+	return columns, state.ErrColumnDoesNotExist
 }
