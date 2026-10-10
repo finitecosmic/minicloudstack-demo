@@ -1,0 +1,99 @@
+# yaml-language-server: $schema=https://taskfile.dev/schema.json
+
+version: '3'
+
+vars:
+  GREETING: Hello, world!
+
+tasks:
+  install:deps:
+    desc: Download tool dependencies
+    cmds:
+      - go mod download
+
+  update:all:
+    desc: update all dependencies
+    cmds:
+      - go get -u ./...
+  # tests
+  test:
+    desc: Run tests with gotestsum
+    cmds:
+      - go tool gotestsum --format testdox -- ./...
+
+  test:verbose:
+    desc: Run all Go tests with verbose output
+    cmds:
+      - go tool gotestsum --format standard-verbose -- ./...
+
+  test:junit:
+    desc: Run tests and generate a JUnit report
+    cmds:
+      - go tool gotestsum --junitfile test-results/junit.xml -- ./...
+
+  test:race:
+    desc: Run all Go tests with race detection
+    cmds:
+      - go test -race ./...
+
+  test:internal:
+    desc: Run all Go tests in internal
+    cmds:
+      - go test ./internal/...
+
+  test:coverage:
+    desc: Run tests with coverage
+    cmds:
+      - go test -cover ./...
+
+  # vet/fmt
+  vet:
+    desc: Run Go vet
+    cmds:
+      - go vet ./...
+
+  fmt:
+    desc: Format Go files
+    cmds:
+      - go fmt ./...
+
+  # benchmarks
+  benchmark:
+    desc: Run all benchmarks
+    cmds:
+      - go test -bench=. ./...
+
+  benchmark:memory:
+    desc: Run benchmarks with memory allocation statistics
+    cmds:
+      - go test -bench=. -benchmem ./...
+
+  benchmark:store:
+    desc: Benchmark SQLite store operations
+    cmds:
+      - go test -bench='Benchmark.*Store' -benchmem ./...
+
+  # vulnerability
+  vulncheck:
+    desc: Scan vulnerabilities
+    deps:
+      - install:deps
+    cmds:
+      - go tool govulncheck ./...
+
+  # combined
+  checks:
+    desc: Run formatting, vetting, and tests
+    cmds:
+      - task: vet
+      - task: vulncheck
+      - task: test
+      - task: test:coverage
+      - task: test:race
+
+  benchmarks:
+    desc: Run benchmarks on memory and store
+    cmds:
+      - task: benchmark
+      - task: benchmark:memory
+      - task: benchmark:store

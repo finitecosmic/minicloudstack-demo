@@ -1,0 +1,10 @@
+# Go build artifacts
+*.exe
+*.test
+*.out
+
+# Test reports
+test-results/
+
+# Local environment
+.env

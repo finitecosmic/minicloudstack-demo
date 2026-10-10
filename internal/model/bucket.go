@@ -5,7 +5,7 @@ import "time"
 const BucketVersion = 1
 
 type Bucket struct {
-	BucketName   string     `json:"name" xml:"name""`
+	BucketName   string     `json:"name" xml:"name"`
 	BucketKey    string     `json:"key" xml:"key"`
 	SpecData     BucketSpec `json:"spec" xml:"spec"`
 	DependsOn    []string   `json:"depends_on" xml:"depends_on"`

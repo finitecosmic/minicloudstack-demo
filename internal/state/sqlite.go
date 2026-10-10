@@ -140,38 +140,62 @@ func (s *SQLiteState) Delete(ctx context.Context, key string) error {
 	return nil
 }
 
-func (s *SQLiteState) Migrate(ctx context.Context) error {
+func (s *SQLiteState) Migrate(ctx context.Context, targetVersion int) (retErr error) {
 	var version int
 
+	if err := s.db.QueryRowContext(ctx, "PRAGMA user_version").Scan(&version); err != nil {
+		return fmt.Errorf("%w %w", ErrQueryRowContext, err)
+	}
+
+	if targetVersion > schemaVersionV2 {
+		return fmt.Errorf("%w: supported version: %d", ErrUnsupportedVersion, version)
+	}
+
+	// already the current version
+	if targetVersion == schemaVersionV2 {
+		return nil
+	}
+
+	// begin transaction, atomic
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("%w %w", ErrBeginTransaction, err)
 	}
-	defer tx.Rollback() //rollback if not commit, atomic
+	defer func() {
+		if err := tx.Rollback(); err != nil &&
+			!errors.Is(err, sql.ErrTxDone) {
+			retErr = errors.Join(
+				retErr,
+				fmt.Errorf("%w: %w", ErrRollBackTx, err),
+			)
+		}
+	}() //rollback if not commit, atomic
 
-	if err := tx.QueryRowContext(ctx, "PRAGMA user_version").Scan(&version); err != nil {
-		return fmt.Errorf("%w %w", ErrQueryRowContext, err)
+	// incrementally update version until current version reachedS
+	log.Printf("migrating SQLite schema from version %d to %d", version, targetVersion)
+
+	for version <= schemaVersionV2 {
+		switch version {
+		case 0:
+			err := migrateToNewVersion(ctx, tx, createResourceTable, 1)
+			if err != nil {
+				return err
+			}
+			version = 1
+		case 1:
+			err := migrateToNewVersion(ctx, tx, createResourceVersionTableV2, 2)
+			if err != nil {
+				return err
+			}
+			version = 2
+		default:
+			continue
+		}
 	}
 
-	log.Printf("migrated sqlite state version %d", version)
-
-	switch version {
-	case schemaVersionV1:
-		if _, err := tx.ExecContext(ctx, migrateV1toV2); err != nil {
-			return fmt.Errorf("%w %w", ErrMigrateV1toV2, err)
-		}
-
-		if _, err := tx.ExecContext(ctx, "PRAGMA user_version = ?", currentSchemaVersion); err != nil {
-			return fmt.Errorf("%w %w", ErrSetSchemaVersion, err)
-		}
-	case schemaVersionV2:
-		s.logger.InfoContext(ctx, "%d", MsgSchemaAlreadyCurrent, currentSchemaVersion)
-	default:
-		return fmt.Errorf("%w %d", ErrUnsupportedVersion, version)
-	}
-
+	// commit tx
 	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("%w %w", ErrTxCommit, err)
+		return fmt.Errorf("%w %v", ErrTxCommit, err)
 	}
 
 	return nil
@@ -182,6 +206,19 @@ func (s *SQLiteState) Ready(ctx context.Context) (bool, error) {
 		return false, err
 	}
 	return true, nil
+}
+
+func migrateToNewVersion(ctx context.Context, tx *sql.Tx, tableSchema string, schemaVersion int) error {
+	_, err := tx.ExecContext(ctx, tableSchema)
+	if err != nil {
+		return fmt.Errorf("%v %v", ErrCreateTableV1, err)
+	}
+
+	updateVersionQuery := fmt.Sprintf("PRAGMA user_version = %d", schemaVersion)
+	if _, err = tx.ExecContext(ctx, updateVersionQuery); err != nil {
+		return fmt.Errorf("%v %v", ErrUpdateSchemaVersion, err)
+	}
+	return nil
 }
 
 func decodeResource(resourceType string, version int, data []byte) (model.Resource, error) {

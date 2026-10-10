@@ -19,6 +19,18 @@ const (
 		updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 	)`
 
+	createResourceVersionTableV2 = `
+	CREATE TABLE IF NOT EXISTS resources (
+		id TEXT PRIMARY KEY,
+		key TEXT,
+		description TEXT,
+		resource_type TEXT NOT NULL,
+		version INTEGER NOT NULL,
+		data BLOB NOT NULL,
+		created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+		updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+	)`
+
 	insertResource = `
 	INSERT INTO resources (
 		id,
